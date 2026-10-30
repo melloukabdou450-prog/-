@@ -1,0 +1,294 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // STRICT ADMIN ROLE: Require Firebase custom claim `admin == true` or exact superadmin email
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.admin == true) ||
+        (request.auth.token.email is string && request.auth.token.email == 'melloukabdou450@gmail.com')
+      );
+    }
+
+    function isValidVin(vin) {
+      return vin is string && vin.size() == 17 && vin.matches('^[A-HJ-NPR-Za-hj-npr-z0-9]{17}$');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isApprovedGarage(garageUid) {
+      return exists(/databases/$(database)/documents/garages/$(garageUid)) &&
+             get(/databases/$(database)/documents/garages/$(garageUid)).data.status == 'approved';
+    }
+
+    function isValidGarage(data) {
+      return data.uid is string && isValidId(data.uid) &&
+             data.garageName is string && data.garageName.size() > 0 && data.garageName.size() <= 150 &&
+             data.wilaya is string && data.wilaya.size() > 0 && data.wilaya.size() <= 100 &&
+             data.commune is string && data.commune.size() > 0 && data.commune.size() <= 100 &&
+             data.address is string && data.address.size() > 0 && data.address.size() <= 250 &&
+             data.phone is string && data.phone.size() >= 8 && data.phone.size() <= 30 &&
+             data.status is string && data.status in ['pending', 'approved', 'rejected'] &&
+             (!('commercialRegisterPhotoUrl' in data) || (data.commercialRegisterPhotoUrl is string && data.commercialRegisterPhotoUrl.size() <= 500000)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidVehicle(data) {
+      return data.vin is string && isValidVin(data.vin) &&
+             data.make is string && data.make.size() > 0 && data.make.size() <= 100 &&
+             data.model is string && data.model.size() > 0 && data.model.size() <= 100 &&
+             data.year is int && data.year >= 1980 && data.year <= 2027 &&
+             data.engine is string && data.engine.size() <= 150 &&
+             data.hasLowConfidence is bool &&
+             data.createdBy is string && data.createdBy == request.auth.uid &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
+             (!('missingFields' in data) || (data.missingFields is list && data.missingFields.size() <= 20)) &&
+             (!('latestOdometerKm' in data) || (data.latestOdometerKm is int && data.latestOdometerKm >= 0 && data.latestOdometerKm <= 1500000));
+    }
+
+    function isValidEvent(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.vin is string && isValidVin(data.vin) &&
+             data.eventType is string && data.eventType in ['service', 'repair', 'odometer', 'inspection', 'correction'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+             data.date is string && data.date.size() >= 8 && data.date.size() <= 30 &&
+             data.odometerKm is int && data.odometerKm >= 0 && data.odometerKm <= 1500000 &&
+             data.verificationLevel is string && data.verificationLevel.size() <= 100 &&
+             (!('serviceProvider' in data) || (data.serviceProvider is string && data.serviceProvider.size() <= 200)) &&
+             (!('sourceType' in data) || (data.sourceType in ['OWNER', 'GARAGE'])) &&
+             // If sourceType is GARAGE, creator must be an approved garage matching request.auth.uid
+             (!('sourceType' in data && data.sourceType == 'GARAGE') || (
+               (isApprovedGarage(request.auth.uid) || isAdmin()) &&
+               data.garageId is string && data.garageId == request.auth.uid
+             )) &&
+             // Privacy: NEVER store customer plain phone number!
+             (!('customerPhone' in data)) &&
+             (!('phone' in data)) &&
+             (!('clientPhone' in data)) &&
+             (!('customerPhoneHash' in data) || (data.customerPhoneHash is string && data.customerPhoneHash.size() <= 64)) &&
+             (!('confirmationCodeHash' in data) || (data.confirmationCodeHash is string && data.confirmationCodeHash.size() <= 64)) &&
+             (!('confirmationStatus' in data) || (data.confirmationStatus in ['PENDING', 'CONFIRMED', 'DISPUTED'])) &&
+             data.prevHash is string && data.prevHash.size() <= 64 &&
+             data.eventHash is string && data.eventHash.size() <= 64 &&
+             (!('isCorrection' in data) || data.isCorrection is bool) &&
+             (!('correctedEventId' in data) || (data.correctedEventId is string && data.correctedEventId.size() <= 128)) &&
+             data.createdBy is string && data.createdBy == request.auth.uid &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidInspection(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.vin is string && isValidVin(data.vin) &&
+             data.overallConditionScore is int && data.overallConditionScore >= 0 && data.overallConditionScore <= 100 &&
+             (!('odometerKmFromDashboard' in data) || data.odometerKmFromDashboard == null || (data.odometerKmFromDashboard is int && data.odometerKmFromDashboard >= 0 && data.odometerKmFromDashboard <= 1500000)) &&
+             (!('odometerConfidence' in data) || data.odometerConfidence is number) &&
+             (!('panels' in data) || (data.panels is list && data.panels.size() <= 30)) &&
+             (!('limitations' in data) || (data.limitations is list && data.limitations.size() <= 20)) &&
+             (!('photoUrls' in data) || (data.photoUrls is list && data.photoUrls.size() <= 20)) &&
+             (!('modelVersion' in data) || (data.modelVersion is string && data.modelVersion.size() <= 100)) &&
+             data.createdBy is string && data.createdBy == request.auth.uid &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidPriceListing(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.make is string && data.make.size() > 0 && data.make.size() <= 100 &&
+             data.model is string && data.model.size() > 0 && data.model.size() <= 100 &&
+             data.year is int && data.year >= 1980 && data.year <= 2027 &&
+             data.km is int && data.km >= 0 && data.km <= 1500000 &&
+             data.price is number && data.price > 0 && data.price <= 500000000 &&
+             data.wilaya is string && data.wilaya.size() > 0 && data.wilaya.size() <= 100 &&
+             data.fuel is string && data.fuel.size() <= 50 &&
+             data.transmission is string && data.transmission.size() <= 50 &&
+             data.source is string && data.source in ['manual', 'csv'] &&
+             data.createdBy is string &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('sellerName' in data)) &&
+             (!('sellerPhone' in data)) &&
+             (!('phone' in data)) &&
+             (!('contact' in data));
+    }
+
+    function isValidEstimate(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.vin is string && isValidVin(data.vin) &&
+             data.inputs is map &&
+             data.outputs is map &&
+             data.comparablesCount is int && data.comparablesCount >= 0 &&
+             data.comparisonLevel is string &&
+             data.confidence is string && data.confidence in ['high', 'medium', 'low'] &&
+             data.createdBy is string && data.createdBy == request.auth.uid &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // Garage accounts: public read, authenticated self create/update, admin approval
+    match /garages/{garageId} {
+      allow get, list: if true;
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == garageId &&
+                       isValidId(garageId) &&
+                       incoming().uid == garageId &&
+                       incoming().status == 'pending' &&
+                       isValidGarage(incoming());
+
+      allow update: if (isAdmin() && isValidGarage(incoming())) ||
+                       (isSignedIn() && request.auth.uid == garageId &&
+                        incoming().status == existing().status &&
+                        isValidGarage(incoming()));
+
+      allow delete: if isAdmin();
+    }
+
+    // Market price listings: public read, admin-only write
+    match /priceListings/{listingId} {
+      allow get, list: if true;
+      allow create: if isAdmin() &&
+                       isValidId(listingId) &&
+                       incoming().id == listingId &&
+                       isValidPriceListing(incoming());
+      allow update: if isAdmin() &&
+                       isValidId(listingId) &&
+                       incoming().id == listingId &&
+                       isValidPriceListing(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Vehicle passport profiles: public read for reports, authenticated create/update, no deletion
+    match /vehicles/{vin} {
+      allow get, list: if true;
+
+      allow create: if isSignedIn() &&
+                       isValidVin(vin) &&
+                       incoming().vin == vin &&
+                       isValidVehicle(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidVin(vin) &&
+                       incoming().vin == existing().vin &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidVehicle(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['latestOdometerKm', 'updatedAt']);
+
+      allow delete: if false;
+
+      // Event timeline subcollection: public read for reports, authenticated add, immutable core
+      match /events/{eventId} {
+        allow get, list: if true;
+
+        allow create: if isSignedIn() &&
+                         isValidVin(vin) &&
+                         isValidId(eventId) &&
+                         incoming().id == eventId &&
+                         incoming().vin == vin &&
+                         isValidEvent(incoming());
+
+        // Confirmation endpoint: only updates verificationLevel, confirmationStatus, confirmedAt, disputedReason
+        allow update: if (
+                        incoming().diff(existing()).affectedKeys().hasOnly([
+                          'verificationLevel', 'confirmationStatus', 'confirmedAt', 'disputedReason'
+                        ]) &&
+                        incoming().id == existing().id &&
+                        incoming().vin == existing().vin &&
+                        incoming().eventHash == existing().eventHash &&
+                        incoming().prevHash == existing().prevHash &&
+                        incoming().odometerKm == existing().odometerKm &&
+                        (
+                          incoming().confirmationStatus in ['CONFIRMED', 'DISPUTED'] ||
+                          isAdmin()
+                        )
+                      );
+
+        allow delete: if false;
+      }
+
+      // AI visual inspection reports: public read for reports, authenticated add only, immutable (no edit/delete)
+      match /inspections/{inspectionId} {
+        allow get, list: if true;
+
+        allow create: if isSignedIn() &&
+                         isValidVin(vin) &&
+                         isValidId(inspectionId) &&
+                         incoming().id == inspectionId &&
+                         incoming().vin == vin &&
+                         isValidInspection(incoming());
+
+        allow update, delete: if false;
+      }
+
+      // Vehicle fair price estimates: public read for reports, authenticated add only, immutable
+      match /estimates/{estimateId} {
+        allow get, list: if true;
+
+        allow create: if isSignedIn() &&
+                         isValidVin(vin) &&
+                         isValidId(estimateId) &&
+                         incoming().id == estimateId &&
+                         incoming().vin == vin &&
+                         isValidEstimate(incoming());
+
+        allow update, delete: if false;
+      }
+    }
+
+    // Public reports: public read, immutable once created
+    match /publicReports/{publicId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(publicId) && incoming().publicId == publicId;
+      allow update, delete: if false;
+    }
+
+    // Owner wallet documents: readable/writeable only by owner
+    match /walletDocuments/{docId} {
+      allow get, list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() && incoming().ownerUid == request.auth.uid && isValidId(docId);
+      allow update: if isSignedIn() && existing().ownerUid == request.auth.uid && incoming().ownerUid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Maintenance reminders: readable/writeable only by owner
+    match /reminders/{reminderId} {
+      allow get, list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() && incoming().ownerUid == request.auth.uid && isValidId(reminderId);
+      allow update: if isSignedIn() && existing().ownerUid == request.auth.uid && incoming().ownerUid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Disputes: public create, admin read/resolve
+    match /disputeRecords/{disputeId} {
+      allow get, list: if isSignedIn() && (isAdmin() || resource.data.reportedBy == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(disputeId) && incoming().reportedBy == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Data deletion requests: owner create, owner/admin read, admin update/resolve
+    match /dataDeletionRequests/{requestId} {
+      allow get, list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(requestId) && incoming().userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}

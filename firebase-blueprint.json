@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Registered vehicle with decoded VIN specs and verification status",
+      "type": "object",
+      "properties": {
+        "vin": { "type": "string", "description": "17-character VIN identifier" },
+        "make": { "type": "string", "description": "Vehicle manufacturer make" },
+        "model": { "type": "string", "description": "Vehicle model name" },
+        "year": { "type": "integer", "description": "Model year" },
+        "engine": { "type": "string", "description": "Engine specification" },
+        "hasLowConfidence": { "type": "boolean", "description": "Whether any core spec field was missing from decode" },
+        "missingFields": { "type": "array", "description": "List of missing field names" },
+        "createdBy": { "type": "string", "description": "Firebase Auth UID of user who registered the vehicle" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last update" },
+        "latestOdometerKm": { "type": "integer", "description": "Latest recorded odometer reading in kilometers" }
+      },
+      "required": ["vin", "make", "model", "year", "engine", "hasLowConfidence", "createdBy", "createdAt"]
+    },
+    "VehicleEvent": {
+      "title": "VehicleEvent",
+      "description": "Immutable cryptographic event on the vehicle passport timeline",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique event identifier" },
+        "vin": { "type": "string", "description": "17-character VIN identifier" },
+        "eventType": { "type": "string", "enum": ["service", "repair", "odometer", "inspection", "correction"], "description": "Type of event" },
+        "title": { "type": "string", "description": "Event headline in Arabic or French" },
+        "description": { "type": "string", "description": "Detailed notes or work performed" },
+        "date": { "type": "string", "description": "Event occurrence date YYYY-MM-DD" },
+        "odometerKm": { "type": "integer", "description": "Odometer reading in kilometers at time of event" },
+        "verificationLevel": { "type": "string", "description": "Verification level" },
+        "serviceProvider": { "type": "string", "description": "Workshop, dealer, or self name" },
+        "sourceType": { "type": "string", "enum": ["OWNER", "GARAGE"], "description": "Source origin of the event" },
+        "garageId": { "type": "string", "description": "UID of garage if submitted by partner garage" },
+        "garageName": { "type": "string", "description": "Business name of the partner garage" },
+        "serviceTemplates": { "type": "array", "description": "Selected service categories" },
+        "priceDzd": { "type": "number", "description": "Service invoice cost in DZD" },
+        "invoicePhotoUrl": { "type": "string", "description": "Optional invoice photo" },
+        "hasOdometerAnomaly": { "type": "boolean", "description": "Whether an odometer drop was detected" },
+        "confirmationCodeHash": { "type": "string", "description": "SHA-256 hash of 6-digit confirmation code" },
+        "confirmationStatus": { "type": "string", "enum": ["PENDING", "CONFIRMED", "DISPUTED"], "description": "Customer verification status" },
+        "customerPhoneHash": { "type": "string", "description": "SHA-256 hash of customer phone (never plain text)" },
+        "disputedReason": { "type": "string", "description": "Notes if customer disputes event" },
+        "prevHash": { "type": "string", "description": "Cryptographic SHA-256 hash of previous event" },
+        "eventHash": { "type": "string", "description": "Cryptographic SHA-256 hash of this event + prevHash" },
+        "isCorrection": { "type": "boolean", "description": "Whether this event corrects an earlier event" },
+        "correctedEventId": { "type": "string", "description": "Identifier of the corrected event if applicable" },
+        "createdBy": { "type": "string", "description": "Firebase Auth UID of creator" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" }
+      },
+      "required": ["id", "vin", "eventType", "title", "date", "odometerKm", "verificationLevel", "prevHash", "eventHash", "createdBy", "createdAt"]
+    },
+    "VehicleInspection": {
+      "title": "VehicleInspection",
+      "description": "AI visual vehicle condition inspection report with panels, findings, and odometer detection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique inspection identifier" },
+        "vin": { "type": "string", "description": "17-character VIN identifier" },
+        "photoUrls": { "type": "array", "description": "List of captured photo URLs or references" },
+        "odometerKmFromDashboard": { "type": "integer", "description": "AI-detected odometer reading in kilometers" },
+        "odometerConfidence": { "type": "number", "description": "Confidence score of odometer reading (0 to 1)" },
+        "panels": { "type": "array", "description": "Evaluated body panels with condition and findings" },
+        "overallConditionScore": { "type": "integer", "description": "Overall condition score from 0 to 100" },
+        "limitations": { "type": "array", "description": "List of inspection limitations" },
+        "modelVersion": { "type": "string", "description": "Gemini model version used" },
+        "createdBy": { "type": "string", "description": "Firebase Auth UID of inspector" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" }
+      },
+      "required": ["id", "vin", "overallConditionScore", "createdBy", "createdAt"]
+    },
+    "PriceListing": {
+      "title": "PriceListing",
+      "description": "Algerian automotive market price reference listing (no seller personal data)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique listing identifier" },
+        "make": { "type": "string", "description": "Vehicle make e.g. Renault, Toyota" },
+        "model": { "type": "string", "description": "Vehicle model e.g. Clio, Hilux" },
+        "year": { "type": "integer", "description": "Manufacturing year" },
+        "km": { "type": "integer", "description": "Odometer reading in km" },
+        "price": { "type": "number", "description": "Price in Algerian Dinars (DZD)" },
+        "wilaya": { "type": "string", "description": "Wilaya code or name e.g. 16 - Alger" },
+        "fuel": { "type": "string", "description": "Fuel type e.g. Essence, Diesel" },
+        "transmission": { "type": "string", "description": "Transmission type e.g. Manuelle, Automatique" },
+        "source": { "type": "string", "enum": ["manual", "csv"], "description": "Entry source" },
+        "createdBy": { "type": "string", "description": "Admin UID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "make", "model", "year", "km", "price", "wilaya", "fuel", "transmission", "source", "createdBy", "createdAt"]
+    },
+    "VehicleEstimate": {
+      "title": "VehicleEstimate",
+      "description": "Deterministic fair market price estimation snapshot with statistical factors and AI summary",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique estimate identifier" },
+        "vin": { "type": "string", "description": "17-character VIN identifier" },
+        "inputs": { "type": "object", "description": "Target inputs (askingPrice, targetKm, targetYear, etc.)" },
+        "outputs": { "type": "object", "description": "Calculated outputs (low, fair, high, condition adjustment, verdict)" },
+        "comparablesCount": { "type": "integer", "description": "Number of comparable listings used" },
+        "comparisonLevel": { "type": "string", "description": "Comparison filter level used (strict, medium, broad)" },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"], "description": "Statistical confidence level" },
+        "freshnessDate": { "type": "string", "description": "Date of newest comparable listing" },
+        "explanation": { "type": "string", "description": "Short Arabic explanation of estimate" },
+        "createdBy": { "type": "string", "description": "User UID who generated the estimate" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "vin", "inputs", "outputs", "comparablesCount", "comparisonLevel", "confidence", "createdBy", "createdAt"]
+    },
+    "GarageAccount": {
+      "title": "GarageAccount",
+      "description": "Partner automotive workshop profile with verification status and business details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID of garage" },
+        "garageName": { "type": "string", "description": "Commercial name of the garage" },
+        "wilaya": { "type": "string", "description": "Wilaya location e.g. 16 - Alger" },
+        "commune": { "type": "string", "description": "Commune / city district" },
+        "address": { "type": "string", "description": "Physical workshop address" },
+        "phone": { "type": "string", "description": "Garage business phone number" },
+        "commercialRegisterPhotoUrl": { "type": "string", "description": "Photo of commercial register (RC) or business card" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Approval status" },
+        "rejectionReason": { "type": "string", "description": "Explanation if rejected" },
+        "ownerEmail": { "type": "string", "description": "Email address of garage manager" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of registration" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last update" }
+      },
+      "required": ["uid", "garageName", "wilaya", "commune", "address", "phone", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/vehicles/{vin}": {
+      "schema": "Vehicle",
+      "description": "Registered vehicles stored at vehicles/{vin}"
+    },
+    "/vehicles/{vin}/events/{eventId}": {
+      "schema": "VehicleEvent",
+      "description": "Append-only immutable event timeline for a vehicle"
+    },
+    "/vehicles/{vin}/inspections/{inspectionId}": {
+      "schema": "VehicleInspection",
+      "description": "AI visual inspection reports stored at vehicles/{vin}/inspections/{inspectionId}"
+    },
+    "/vehicles/{vin}/estimates/{estimateId}": {
+      "schema": "VehicleEstimate",
+      "description": "Fair price estimation reports stored at vehicles/{vin}/estimates/{estimateId}"
+    },
+    "/priceListings/{listingId}": {
+      "schema": "PriceListing",
+      "description": "Market price listings for valuation comparisons"
+    },
+    "/garages/{garageId}": {
+      "schema": "GarageAccount",
+      "description": "Partner workshop accounts with approval status"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Car Passport",
+  "description": "Car Passport (جواز السيارة) - Vehicle history, VIN decoder, verifiable timeline and reports in Arabic and French.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
